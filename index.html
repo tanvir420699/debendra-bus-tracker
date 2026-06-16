@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>দেবেন্দ্র কলেজ বাস ট্র্যাকার</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', 'Noto Sans Bengali', Arial, sans-serif; background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 100%); min-height: 100vh; color: #f8fafc; }
+  #map { width: 100%; height: 360px; border-radius: 14px; z-index: 1; }
+  .header { background: rgba(255,255,255,0.05); border-bottom: 1px solid rgba(255,255,255,0.1); backdrop-filter: blur(10px); padding: 14px 18px; display: flex; align-items: center; justify-content: space-between; }
+  .header-title { font-size: 17px; font-weight: 800; }
+  .header-sub { font-size: 10px; color: #94a3b8; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 3px; }
+  .live-badge { background: rgba(16,185,129,0.15); border: 1px solid #10b981; border-radius: 20px; padding: 4px 10px; font-size: 11px; color: #10b981; font-weight: 700; display: flex; align-items: center; gap: 5px; }
+  .live-dot { width: 7px; height: 7px; border-radius: 50%; background: #10b981; animation: pulse 1.5s infinite; }
+  .refresh-btn { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: #fff; border-radius: 8px; padding: 6px 12px; cursor: pointer; font-size: 13px; margin-left: 8px; }
+  .banner { background: linear-gradient(90deg, #7c3aed, #3b82f6); padding: 11px 18px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .banner-text { font-size: 13px; font-weight: 600; }
+  .board-btn { background: #fff; color: #7c3aed; border: none; border-radius: 20px; padding: 7px 16px; cursor: pointer; font-weight: 700; font-size: 13px; white-space: nowrap; }
+  .boarded-banner { background: linear-gradient(90deg, #065f46, #047857); padding: 11px 18px; display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+  .tabs { display: flex; background: rgba(0,0,0,0.2); border-bottom: 1px solid rgba(255,255,255,0.08); }
+  .tab-btn { flex: 1; padding: 12px 0; background: none; border: none; color: #94a3b8; font-weight: 500; border-bottom: 2px solid transparent; cursor: pointer; font-size: 14px; transition: all 0.2s; font-family: inherit; }
+  .tab-btn.active { color: #60a5fa; font-weight: 700; border-bottom: 2px solid #60a5fa; }
+  .content { padding: 14px; max-width: 900px; margin: 0 auto; }
+  .map-wrap { background: rgba(255,255,255,0.05); border-radius: 16px; overflow: hidden; border: 1px solid rgba(255,255,255,0.1); margin-bottom: 12px; }
+  .filter-chips { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+  .chip { background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); color: #fff; border-radius: 20px; padding: 5px 12px; cursor: pointer; font-size: 12px; font-weight: 600; display: flex; align-items: center; gap: 5px; font-family: inherit; }
+  .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 12px; }
+  .stat-card { background: rgba(255,255,255,0.06); border-radius: 12px; padding: 12px; border: 1px solid rgba(255,255,255,0.08); text-align: center; }
+  .stat-icon { font-size: 20px; }
+  .stat-value { font-size: 18px; font-weight: 800; }
+  .stat-label { font-size: 11px; color: #94a3b8; margin-top: 2px; }
+  .location-btn { width: 100%; background: rgba(59,130,246,0.15); border: 1px solid rgba(59,130,246,0.4); color: #93c5fd; border-radius: 10px; padding: 11px; cursor: pointer; font-size: 14px; font-weight: 600; font-family: inherit; }
+  .bus-card { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 14px; padding: 14px; margin-bottom: 12px; cursor: pointer; transition: all 0.2s; }
+  .bus-card:hover { background: rgba(255,255,255,0.08); }
+  .bus-card.my-bus { background: linear-gradient(135deg, rgba(16,185,129,0.15), rgba(5,150,105,0.08)); border: 2px solid #10b981; }
+  .bus-card.offline { opacity: 0.45; cursor: default; }
+  .bus-tag { color: #fff; border-radius: 8px; padding: 2px 10px; font-size: 12px; font-weight: 800; margin-right: 8px; }
+  .bus-name { font-weight: 700; font-size: 15px; }
+  .bus-route { font-size: 12px; color: #94a3b8; margin: 5px 0 8px; }
+  .badge { border-radius: 20px; padding: 3px 10px; font-size: 12px; font-weight: 600; display: inline-block; margin-right: 6px; margin-bottom: 4px; }
+  .bus-stop-info { margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.07); font-size: 12px; color: #94a3b8; display: flex; gap: 12px; flex-wrap: wrap; }
+  /* Tracking banner - shown when viewer opens link */
+  .tracking-banner { background: linear-gradient(90deg, #1e3a5f, #0f2d4a); border-bottom: 2px solid #3b82f6; padding: 14px 18px; }
+  .tracking-bus-info { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+  .distance-box { background: rgba(59,130,246,0.15); border: 1px solid #3b82f6; border-radius: 12px; padding: 12px 16px; display: flex; justify-content: space-around; text-align: center; }
+  .distance-val { font-size: 22px; font-weight: 800; color: #60a5fa; }
+  .distance-lbl { font-size: 11px; color: #94a3b8; margin-top: 2px; }
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.75); z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 20px; }
+  .modal-box { background: #1e293b; border-radius: 16px; padding: 24px; max-width: 400px; width: 100%; border: 1px solid #334155; }
+  .modal-bus-btn { background: transparent; border-radius: 10px; padding: 12px 16px; cursor: pointer; color: #f8fafc; text-align: left; display: flex; align-items: center; gap: 12px; width: 100%; margin-bottom: 8px; font-family: inherit; }
+  .modal-cancel { margin-top: 8px; width: 100%; background: rgba(255,255,255,0.05); border: 1px solid #334155; color: #94a3b8; border-radius: 8px; padding: 10px; cursor: pointer; font-size: 13px; font-family: inherit; }
+  .notif { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: #1e293b; color: #f8fafc; padding: 10px 22px; border-radius: 30px; z-index: 99999; box-shadow: 0 4px 20px rgba(0,0,0,0.4); font-size: 14px; font-weight: 600; border: 1px solid #334155; animation: fadeIn 0.3s ease; white-space: nowrap; }
+  .detail-card { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 16px; margin-bottom: 14px; }
+  .timeline-dot { width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; margin-top: 2px; }
+  .timeline-line { width: 2px; height: 24px; margin-top: 2px; }
+  .guide-card { background: rgba(59,130,246,0.08); border: 1px solid rgba(59,130,246,0.2); border-radius: 14px; padding: 16px; margin-top: 8px; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+  @keyframes fadeIn { from{opacity:0;transform:translateX(-50%) translateY(-10px)} to{opacity:1;transform:translateX(-50%) translateY(0)} }
+  .hidden { display: none !important; }
+  button:hover { opacity: 0.88; }
+</style>
+</head>
+<body>
+
+<div class="notif hidden" id="notif"></div>
+
+<!-- HEADER -->
+<div class="header">
+  <div>
+    <div class="header-sub">Physics Department</div>
+    <div class="header-title">🚌 দেবেন্দ্র কলেজ বাস ট্র্যাকার</div>
+  </div>
+  <div style="display:flex;align-items:center;gap:8px">
+    <div class="live-badge"><span class="live-dot"></span>LIVE</div>
+    <button class="refresh-btn" onclick="handleRefresh()">🔄 রিফ্রেশ</button>
+  </div>
+</div>
+
+<!-- TRACKING BANNER: দেখায় যখন কেউ link দিয়ে ঢোকে -->
+<div class="tracking-banner hidden" id="trackingBanner">
+  <div class="tracking-bus-info">
+    <div id="trackingBusTag" style="border-radius:8px;padding:4px 12px;font-size:13px;font-weight:800;color:#fff"></div>
+    <div>
+      <div id="trackingBusName" style="font-weight:700;font-size:15px"></div>
+      <div id="trackingBusRoute" style="font-size:11px;color:#94a3b8;margin-top:2px"></div>
+    </div>
+  </div>
+  <div class="distance-box" id="distanceBox">
+    <div>
+      <div class="distance-val" id="distToUser">—</div>
+      <div class="distance-lbl">আপনি থেকে বাস</div>
+    </div>
+    <div style="width:1px;background:rgba(255,255,255,0.1)"></div>
+    <div>
+      <div class="distance-val" id="etaToUser" style="font-size:16px">—</div>
+      <div class="distance-lbl">পৌঁছাতে সময়</div>
+    </div>
+    <div style="width:1px;background:rgba(255,255,255,0.1)"></div>
+    <div>
+      <div class="distance-val" id="distToCollege" style="font-size:16px">—</div>
+      <div class="distance-lbl">কলেজ পর্যন্ত</div>
+    </div>
+  </div>
+  <div style="margin-top:10px;font-size:11px;color:#64748b;text-align:center" id="trackingStatus">📍 আপনার অবস্থান নেওয়া হচ্ছে...</div>
+</div>
+
+<!-- BOARD BUS BANNER -->
+<div class="banner" id="boardBanner">
+  <div class="banner-text">🧑‍🎓 আপনি কি এখন বাসে আছেন? অবস্থান শেয়ার করুন!</div>
+  <button class="board-btn" onclick="openModal()">বাসে উঠি 🚌</button>
+</div>
+
+<!-- BOARDED BANNER -->
+<div class="boarded-banner hidden" id="boardedBanner">
+  <div>
+    <div style="font-size:13px;font-weight:700">✅ আপনি "<span id="boardedBusName"></span>" বাসে আছেন</div>
+    <div style="font-size:11px;color:#a7f3d0;margin-top:3px">GPS চালু — অবস্থান শেয়ার হচ্ছে</div>
+  </div>
+  <div style="display:flex;gap:8px">
+    <button onclick="copyLink()" style="background:rgba(255,255,255,0.15);color:#fff;border:1px solid rgba(255,255,255,0.3);border-radius:20px;padding:6px 14px;cursor:pointer;font-size:12px;font-weight:600;font-family:inherit">🔗 লিংক কপি</button>
+    <button onclick="alightBus()" style="background:rgba(239,68,68,0.2);color:#fca5a5;border:1px solid rgba(239,68,68,0.3);border-radius:20px;padding:6px 14px;cursor:pointer;font-size:12px;font-weight:600;font-family:inherit">নেমে গেছি</button>
+  </div>
+</div>
+
+<!-- TABS -->
+<div class="tabs">
+  <button class="tab-btn active" onclick="switchTab('map',this)">🗺️ ম্যাপ</button>
+  <button class="tab-btn" onclick="switchTab('buses',this)">🚌 সব বাস</button>
+  <button class="tab-btn" onclick="switchTab('details',this)">📊 বিস্তারিত</button>
+</div>
+
+<!-- MAP TAB -->
+<div class="content" id="tab-map">
+  <div class="filter-chips" id="filterChips"></div>
+  <div class="map-wrap"><div id="map"></div></div>
+  <div class="stats-grid">
+    <div class="stat-card"><div class="stat-icon">🚌</div><div class="stat-value">6</div><div class="stat-label">মোট বাস</div></div>
+    <div class="stat-card"><div class="stat-icon">✅</div><div class="stat-value" id="runningCount">0</div><div class="stat-label" style="color:#10b981">চলছে</div></div>
+    <div class="stat-card"><div class="stat-icon">🕐</div><div class="stat-value" style="font-size:14px" id="lastUpdate">--</div><div class="stat-label">শেষ আপডেট</div></div>
+  </div>
+  <button class="location-btn" onclick="getMyLocation()">📍 আমার অবস্থান ম্যাপে দেখাও</button>
+</div>
+
+<!-- BUSES TAB -->
+<div class="content hidden" id="tab-buses">
+  <div id="busList"></div>
+</div>
+
+<!-- DETAILS TAB -->
+<div class="content hidden" id="tab-details">
+  <div id="detailList"></div>
+  <div class="guide-card">
+    <div style="font-weight:700;font-size:15px;margin-bottom:10px;color:#60a5fa">📱 কিভাবে ব্যবহার করবেন</div>
+    <div style="display:flex;flex-direction:column;gap:8px;font-size:13px;color:#cbd5e1">
+      <div><b>🚌 বাসে উঠলে</b> — "বাসে উঠি" চাপুন, বাস বেছে নিন, লিংক কপি করে Telegram-এ দিন</div>
+      <div><b>👁️ দেখতে চাইলে</b> — লিংকে ঢুকলে আপনার অবস্থান নেবে, বাস কতদূর দেখাবে</div>
+      <div><b>🔄 অটো আপডেট</b> — প্রতি ১৫ সেকেন্ডে তথ্য আপনাআপনি আপডেট হয়</div>
+    </div>
+  </div>
+</div>
+
+<div style="text-align:center;padding:16px;color:#475569;font-size:11px;border-top:1px solid rgba(255,255,255,0.05);margin-top:8px">
+  সরকারি দেবেন্দ্র কলেজ, মানিকগঞ্জ · Physics Department Bus Tracker
+</div>
+
+<!-- MODAL -->
+<div class="modal-overlay hidden" id="modal">
+  <div class="modal-box">
+    <div style="font-size:18px;font-weight:800;margin-bottom:16px">🚌 কোন বাসে উঠলেন?</div>
+    <div id="modalBusList"></div>
+    <button class="modal-cancel" onclick="closeModal()">বাতিল</button>
+  </div>
+</div>
+
+<script>
+// =================== BUS DATA ===================
+const BUSES = [
+  { id:'bus1', name:'সাটুরিয়া এক্সপ্রেস', shortName:'B1', route:'সাটুরিয়া → গোলড়া → দেবেন্দ্র কলেজ', color:'#EF4444',
+    stops:[{name:'সাটুরিয়া বাসস্ট্যান্ড',lat:23.9271,lng:90.0674},{name:'গোলড়া',lat:23.8950,lng:90.0820},{name:'মানিকগঞ্জ বাস টার্মিনাল',lat:23.8634,lng:90.0054},{name:'দেবেন্দ্র কলেজ',lat:23.8653,lng:89.9987}]},
+  { id:'bus2', name:'সিংগাইর লিংক', shortName:'B2', route:'শহিদ রফিক সেতু → সিংগাইর → দেবেন্দ্র কলেজ', color:'#3B82F6',
+    stops:[{name:'শহিদ রফিক সেতু',lat:23.8760,lng:90.1221},{name:'ধল্লা',lat:23.8680,lng:90.0900},{name:'সিংগাইর',lat:23.8501,lng:90.0611},{name:'দেবেন্দ্র কলেজ',lat:23.8653,lng:89.9987}]},
+  { id:'bus3', name:'আরিচা স্পেশাল', shortName:'B3', route:'আরিচা বাসস্ট্যান্ড → দেবেন্দ্র কলেজ', color:'#10B981',
+    stops:[{name:'আরিচা বাসস্ট্যান্ড',lat:23.8903,lng:89.8741},{name:'মানিকগঞ্জ সদর',lat:23.8634,lng:89.9954},{name:'দেবেন্দ্র কলেজ',lat:23.8653,lng:89.9987}]},
+  { id:'bus4', name:'দৌলতপুর মেট্রো', shortName:'B4', route:'দৌলতপুর হাসপাতাল গেট → দেবেন্দ্র কলেজ', color:'#F59E0B',
+    stops:[{name:'দৌলতপুর হাসপাতাল গেট',lat:23.9510,lng:89.9821},{name:'মানিকগঞ্জ পুরাতন বাসস্ট্যান্ড',lat:23.8680,lng:89.9990},{name:'দেবেন্দ্র কলেজ',lat:23.8653,lng:89.9987}]},
+  { id:'bus5', name:'নবীনগর ভিলেজ লাইন', shortName:'B5', route:'নবীনগর ভিলেজ লাইন কাউন্টার → দেবেন্দ্র কলেজ', color:'#8B5CF6',
+    stops:[{name:'নবীনগর ভিলেজ লাইন কাউন্টার',lat:23.8730,lng:90.1560},{name:'নবীনগর সেন্টার',lat:23.8720,lng:90.1450},{name:'মানিকগঞ্জ',lat:23.8634,lng:90.0054},{name:'দেবেন্দ্র কলেজ',lat:23.8653,lng:89.9987}]},
+  { id:'bus6', name:'হরিরামপুর শাটল', shortName:'B6', route:'হরিরামপুর উপজেলা গেট → দেবেন্দ্র কলেজ', color:'#EC4899',
+    stops:[{name:'হরিরামপুর উপজেলা গেট',lat:23.7410,lng:89.9051},{name:'হরিরামপুর বাজার',lat:23.7530,lng:89.9210},{name:'মানিকগঞ্জ',lat:23.8634,lng:89.9954},{name:'দেবেন্দ্র কলেজ',lat:23.8653,lng:89.9987}]},
+];
+const COLLEGE = {lat:23.8653, lng:89.9987};
+const WEBSITE_URL = 'https://debendra-bus-tracker.vercel.app';
+const BOT_TOKEN = '8747411013:AAEHYW9XafEBwCqGmsrSxbglOdijlpbsRI0';
+const CHANNEL = '@DebendraBusTracker';
+
+// =================== STATE ===================
+let busData = {};         // active buses keyed by id
+let selectedBus = null;
+let userLocation = null;
+let myBoardedBus = null;
+let shareLink = '';
+let trackingBusId = null; // set when viewer opens a shared link
+let map, userMarker;
+let busMarkers = {};
+let busPolylines = {};
+let locationWatchId = null;
+let trackingIntervalId = null;
+
+// =================== UTILS ===================
+function haversine(lat1,lng1,lat2,lng2){
+  const R=6371,dLat=(lat2-lat1)*Math.PI/180,dLng=(lng2-lng1)*Math.PI/180;
+  const a=Math.sin(dLat/2)**2+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLng/2)**2;
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+function etaText(km){
+  const m=Math.round(km/35*60);
+  if(m<1) return 'এসে গেছে!';
+  if(m<60) return m+' মিনিট';
+  return Math.floor(m/60)+'ঘ '+( m%60)+'মি';
+}
+function statusColor(s){ return s==='চলছে'?'#10B981':s==='বিরতি'?'#F59E0B':'#EF4444'; }
+function nearestStop(bus,lat,lng){
+  let minD=Infinity,idx=0;
+  bus.stops.forEach((s,i)=>{ const d=haversine(lat,lng,s.lat,s.lng); if(d<minD){minD=d;idx=i;} });
+  return idx;
+}
+
+// =================== STORAGE ===================
+function saveBus(id,data){ try{ localStorage.setItem('bd_'+id,JSON.stringify(data)); }catch(e){} }
+function loadBus(id){ try{ const v=localStorage.getItem('bd_'+id); return v?JSON.parse(v):null; }catch(e){return null;} }
+function clearBus(id){ try{ localStorage.removeItem('bd_'+id); }catch(e){} }
+function loadAllBuses(){
+  BUSES.forEach(bus=>{
+    const d=loadBus(bus.id);
+    if(d&&d.active) busData[bus.id]=d;
+    else if(busData[bus.id]&&!busData[bus.id].active) delete busData[bus.id];
+  });
+}
+
+// =================== GPS TRACKING (for rider) ===================
+function startTracking(busId){
+  if(!navigator.geolocation){ showNotif('❌ GPS নেই'); return; }
+  if(locationWatchId!==null) navigator.geolocation.clearWatch(locationWatchId);
+  locationWatchId = navigator.geolocation.watchPosition(
+    pos => pushPosition(busId, pos.coords.latitude, pos.coords.longitude),
+    err => console.warn('GPS err',err),
+    {enableHighAccuracy:true, maximumAge:8000, timeout:15000}
+  );
+}
+function stopTracking(){
+  if(locationWatchId!==null){ navigator.geolocation.clearWatch(locationWatchId); locationWatchId=null; }
+}
+function pushPosition(busId, lat, lng){
+  const bus = BUSES.find(b=>b.id===busId); if(!bus) return;
+  userLocation = {lat,lng};
+  const si = nearestStop(bus,lat,lng);
+  const data = {
+    id:busId, lat, lng, active:true, status:'চলছে',
+    currentStop: bus.stops[si].name,
+    nextStop: bus.stops[Math.min(si+1,bus.stops.length-1)].name,
+    dist: haversine(lat,lng,COLLEGE.lat,COLLEGE.lng).toFixed(1),
+    updated: new Date().toLocaleTimeString('bn-BD',{hour:'2-digit',minute:'2-digit'})
+  };
+  busData[busId]=data;
+  saveBus(busId,data);
+  refreshUI();
+  // Update tracking banner for viewer in same session
+  if(trackingBusId===busId && userLocation) updateTrackingBanner();
+}
+
+// =================== TRACKING BANNER (for viewer) ===================
+function initTrackingMode(busId){
+  trackingBusId = busId;
+  const bus = BUSES.find(b=>b.id===busId);
+  if(!bus) return;
+
+  // Show tracking banner, hide board banner
+  document.getElementById('trackingBanner').classList.remove('hidden');
+  document.getElementById('boardBanner').classList.add('hidden');
+  document.getElementById('trackingBusTag').textContent = bus.shortName;
+  document.getElementById('trackingBusTag').style.background = bus.color;
+  document.getElementById('trackingBusName').textContent = bus.name;
+  document.getElementById('trackingBusRoute').textContent = bus.route;
+
+  // Auto get viewer's location
+  if(navigator.geolocation){
+    navigator.geolocation.getCurrentPosition(pos=>{
+      userLocation = {lat:pos.coords.latitude, lng:pos.coords.longitude};
+      // Show user on map
+      if(userMarker) userMarker.remove();
+      const icon=L.divIcon({html:`<div style="background:#3B82F6;border:3px solid #fff;border-radius:50%;width:18px;height:18px"></div>`,iconSize:[18,18],iconAnchor:[9,9],className:''});
+      userMarker=L.marker([userLocation.lat,userLocation.lng],{icon}).addTo(map).bindPopup('আপনার অবস্থান');
+      updateTrackingBanner();
+    }, err=>{
+      document.getElementById('trackingStatus').textContent='⚠️ অবস্থান পাওয়া যায়নি — GPS চালু করুন';
+    }, {enableHighAccuracy:true,timeout:12000});
+  }
+
+  // Highlight the tracked bus on map
+  selectedBus = busId;
+
+  // Keep updating banner every 10s
+  trackingIntervalId = setInterval(()=>{
+    loadAllBuses();
+    updateTrackingBanner();
+    refreshUI();
+  }, 10000);
+}
+
+function updateTrackingBanner(){
+  const pos = busData[trackingBusId];
+  if(!pos || !pos.active){
+    document.getElementById('trackingStatus').textContent = '⚫ এই বাসে এখন কেউ নেই';
+    document.getElementById('distToUser').textContent = '—';
+    document.getElementById('etaToUser').textContent = '—';
+    document.getElementById('distToCollege').textContent = '—';
+    return;
+  }
+
+  // Distance from viewer to bus
+  if(userLocation){
+    const d = haversine(userLocation.lat, userLocation.lng, pos.lat, pos.lng);
+    document.getElementById('distToUser').textContent = d.toFixed(1)+' কিমি';
+    document.getElementById('etaToUser').textContent = etaText(d);
+  }
+
+  // Bus to college
+  document.getElementById('distToCollege').textContent = (pos.dist||'?')+' কিমি';
+  document.getElementById('trackingStatus').textContent = '📍 বাস: '+pos.currentStop+' → '+pos.nextStop+' · আপডেট: '+pos.updated;
+
+  // Fit map to show both user and bus
+  if(userLocation && pos.lat && pos.lng && map){
+    const bounds = L.latLngBounds([[userLocation.lat,userLocation.lng],[pos.lat,pos.lng]]);
+    map.fitBounds(bounds, {padding:[60,60]});
+  } else if(pos.lat && pos.lng && map){
+    map.setView([pos.lat,pos.lng], 13);
+  }
+}
+
+// =================== MAP ===================
+function initMap(){
+  map = L.map('map').setView([COLLEGE.lat,COLLEGE.lng],11);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap',maxZoom:18}).addTo(map);
+  const ci=L.divIcon({html:`<div style="background:#1e3a5f;border:3px solid #fff;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:13px">🏫</div>`,iconSize:[28,28],iconAnchor:[14,14],className:''});
+  L.marker([COLLEGE.lat,COLLEGE.lng],{icon:ci}).addTo(map).bindPopup('<b>সরকারি দেবেন্দ্র কলেজ, মানিকগঞ্জ</b>');
+  BUSES.forEach(bus=>{
+    busPolylines[bus.id]=L.polyline(bus.stops.map(s=>[s.lat,s.lng]),{color:bus.color,weight:3,opacity:0.6,dashArray:'6,4'}).addTo(map);
+    bus.stops.forEach(stop=>{
+      L.circleMarker([stop.lat,stop.lng],{radius:5,color:bus.color,fillColor:bus.color,fillOpacity:0.8,weight:2}).addTo(map).bindPopup(`<b>${stop.name}</b><br><span style="color:${bus.color}">${bus.name}</span>`);
+    });
+  });
+}
+
+function updateMapMarkers(){
+  Object.values(busMarkers).forEach(m=>m.remove());
+  busMarkers={};
+  BUSES.forEach(bus=>{
+    const pos=busData[bus.id];
+    if(!pos||!pos.active) return;
+    if(selectedBus && selectedBus!==bus.id) return;
+    const icon=L.divIcon({
+      html:`<div style="background:${bus.color};border:3px solid #fff;border-radius:50%;width:36px;height:36px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:800;box-shadow:0 2px 8px rgba(0,0,0,0.4)">${bus.shortName}</div>`,
+      iconSize:[36,36],iconAnchor:[18,18],className:''
+    });
+    const trackerLink=`${WEBSITE_URL}?tracking=${bus.id}`;
+    busMarkers[bus.id]=L.marker([pos.lat,pos.lng],{icon}).addTo(map).bindPopup(
+      `<div style="font-family:sans-serif;min-width:180px">
+        <b style="color:${bus.color}">${bus.name}</b><br>
+        অবস্থা: <b style="color:${statusColor(pos.status)}">${pos.status}</b><br>
+        কলেজ পর্যন্ত: <b>${pos.dist} কিমি</b><br>
+        স্থান: ${pos.currentStop} → ${pos.nextStop}<br>
+        <a href="${trackerLink}" style="color:#3b82f6;font-weight:700;font-size:12px;margin-top:6px;display:block">🌐 ট্র্যাক করুন</a>
+      </div>`
+    );
+  });
+  BUSES.forEach(bus=>{
+    if(busPolylines[bus.id]) busPolylines[bus.id].setStyle({opacity:!selectedBus||selectedBus===bus.id?0.6:0.1});
+  });
+}
+
+function filterBus(id){
+  selectedBus = selectedBus===id?null:id;
+  updateMapMarkers();
+  renderFilterChips();
+  if(selectedBus){
+    const pos=busData[selectedBus], bus=BUSES.find(b=>b.id===selectedBus);
+    if(pos&&bus){ const b=L.latLngBounds(bus.stops.map(s=>[s.lat,s.lng])); b.extend([pos.lat,pos.lng]); map.fitBounds(b,{padding:[30,30]}); }
+    else if(bus){ map.fitBounds(L.latLngBounds(bus.stops.map(s=>[s.lat,s.lng])),{padding:[30,30]}); }
+  } else { map.setView([COLLEGE.lat,COLLEGE.lng],11); }
+}
+
+// =================== RENDER ===================
+function renderFilterChips(){
+  const c=document.getElementById('filterChips');
+  c.innerHTML=`<button class="chip ${!selectedBus?'active':''}" onclick="filterBus(null)" style="${!selectedBus?'background:rgba(59,130,246,0.3);border:2px solid #3b82f6':''}">সব বাস</button>`;
+  BUSES.forEach(bus=>{
+    const pos=busData[bus.id], active=selectedBus===bus.id, isOn=pos&&pos.active;
+    c.innerHTML+=`<button class="chip" onclick="filterBus('${bus.id}')" style="background:${active?bus.color+'30':'rgba(255,255,255,0.05)'};border:${active?'2px':'1px'} solid ${active?bus.color:'rgba(255,255,255,0.1)'}">
+      <span style="width:8px;height:8px;border-radius:50%;background:${isOn?statusColor(pos.status):'#475569'};display:inline-block"></span>
+      ${bus.shortName}
+    </button>`;
+  });
+}
+
+function renderBusList(){
+  const c=document.getElementById('busList');
+  const sorted=[...BUSES].sort((a,b)=>(!!(busData[b.id]&&busData[b.id].active))-(!!(busData[a.id]&&busData[a.id].active)));
+  let html='';
+  let anyActive=false;
+  sorted.forEach(bus=>{
+    const pos=busData[bus.id], isMyBus=myBoardedBus===bus.id, isOn=pos&&pos.active;
+    if(isOn) anyActive=true;
+
+    // Distance from viewer/user to bus
+    let distLabel='—', etaLabel='—';
+    if(isOn&&pos&&userLocation){
+      const d=haversine(userLocation.lat,userLocation.lng,pos.lat,pos.lng);
+      distLabel=d.toFixed(1)+' কিমি';
+      etaLabel=etaText(d);
+    } else if(isOn&&pos){
+      distLabel=pos.dist+' কিমি (কলেজ থেকে)';
+    }
+
+    html+=`<div class="bus-card ${isMyBus?'my-bus':''} ${!isOn&&!isMyBus?'offline':''}" onclick="${isOn?`switchTab('map');filterBus('${bus.id}')`:'void(0)'}" style="border-left:4px solid ${bus.color}">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        <div style="flex:1">
+          <div style="display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:4px">
+            <span class="bus-tag" style="background:${bus.color}">${bus.shortName}</span>
+            <span class="bus-name">${bus.name}</span>
+            ${isMyBus?'<span style="background:#10b981;color:#fff;border-radius:20px;padding:2px 10px;font-size:11px;font-weight:700">আপনি এই বাসে</span>':''}
+            ${isOn&&trackingBusId===bus.id?'<span style="background:#3b82f6;color:#fff;border-radius:20px;padding:2px 10px;font-size:11px;font-weight:700">👁️ ট্র্যাকিং</span>':''}
+          </div>
+          <div class="bus-route">${bus.route}</div>
+          <div>
+            ${isOn
+              ?`<span class="badge" style="background:${statusColor(pos.status)}20;border:1px solid ${statusColor(pos.status)}50;color:${statusColor(pos.status)}">● ${pos.status}</span>
+                <span class="badge" style="background:rgba(255,255,255,0.08);color:#cbd5e1">📍 ${distLabel}</span>
+                <span class="badge" style="background:rgba(255,255,255,0.08);color:#cbd5e1">⏱️ ${etaLabel}</span>`
+              :`<span class="badge" style="background:rgba(71,85,105,0.3);border:1px solid #475569;color:#64748b">⚫ কেউ বাসে নেই</span>`
+            }
+          </div>
+        </div>
+      </div>
+      ${isOn?`<div class="bus-stop-info"><span>📌 ${pos.currentStop}</span><span>→</span><span>🎯 ${pos.nextStop}</span></div>`:''}
+    </div>`;
+  });
+  if(!anyActive){
+    html=`<div style="text-align:center;padding:32px 16px;color:#475569">
+      <div style="font-size:40px;margin-bottom:12px">🚌</div>
+      <div style="font-size:15px;font-weight:600;color:#64748b">এখন কোনো বাসে কেউ নেই</div>
+      <div style="font-size:12px;color:#475569;margin-top:6px">বাসে উঠলে "বাসে উঠি" বাটন চাপুন</div>
+    </div>`+html;
+  }
+  c.innerHTML=html;
+}
+
+function renderDetails(){
+  const c=document.getElementById('detailList');
+  c.innerHTML='';
+  BUSES.forEach(bus=>{
+    const pos=busData[bus.id], isOn=pos&&pos.active;
+    let sh='';
+    bus.stops.forEach((stop,idx)=>{
+      const isCur=isOn&&stop.name===pos.currentStop, isDest=idx===bus.stops.length-1;
+      sh+=`<div style="display:flex;align-items:flex-start;gap:10px;padding-bottom:10px">
+        <div style="display:flex;flex-direction:column;align-items:center">
+          <div class="timeline-dot" style="background:${isDest?'#1e3a5f':isCur?bus.color:'rgba(255,255,255,0.15)'};border:${isCur?`3px solid ${bus.color}`:isDest?'3px solid #3b82f6':'2px solid rgba(255,255,255,0.2)'};box-shadow:${isCur?`0 0 10px ${bus.color}`:'none'}"></div>
+          ${idx<bus.stops.length-1?`<div class="timeline-line" style="background:rgba(255,255,255,0.1)"></div>`:''}
+        </div>
+        <div style="font-size:13px;font-weight:${isCur||isDest?700:500};color:${isCur?bus.color:isDest?'#60a5fa':'#cbd5e1'}">
+          ${stop.name}
+          ${isCur?`<span style="margin-left:8px;background:${bus.color};color:#fff;border-radius:20px;padding:1px 8px;font-size:10px">এখানে আছে</span>`:''}
+          ${isDest?`<span style="margin-left:8px;background:#1e3a5f;color:#60a5fa;border-radius:20px;padding:1px 8px;font-size:10px;border:1px solid #3b82f6">গন্তব্য</span>`:''}
+        </div>
+      </div>`;
+    });
+    c.innerHTML+=`<div class="detail-card" style="border-left:4px solid ${bus.color};${!isOn?'opacity:0.45':''}">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <div><span class="bus-tag" style="background:${bus.color}">${bus.shortName}</span><span style="font-weight:700">${bus.name}</span></div>
+        <div style="background:${isOn?statusColor(pos.status)+'20':'rgba(71,85,105,0.3)'};border:1px solid ${isOn?statusColor(pos.status)+'40':'#475569'};color:${isOn?statusColor(pos.status):'#64748b'};border-radius:20px;padding:3px 12px;font-size:12px;font-weight:700">${isOn?pos.status:'কেউ নেই'}</div>
+      </div>
+      <div style="margin-left:8px">${sh}</div>
+    </div>`;
+  });
+}
+
+function renderModalBuses(){
+  const c=document.getElementById('modalBusList');
+  c.innerHTML='';
+  BUSES.forEach(bus=>{
+    c.innerHTML+=`<button class="modal-bus-btn" onclick="boardBus('${bus.id}')" style="background:${bus.color}20;border:2px solid ${bus.color}">
+      <span style="background:${bus.color};border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex-shrink:0;color:#fff">${bus.shortName}</span>
+      <div><div style="font-weight:700;font-size:14px">${bus.name}</div><div style="font-size:11px;color:#94a3b8;margin-top:2px">${bus.route}</div></div>
+    </button>`;
+  });
+}
+
+function updateStats(){
+  const r=Object.values(busData).filter(p=>p.active&&p.status==='চলছে').length;
+  document.getElementById('runningCount').textContent=r;
+  document.getElementById('lastUpdate').textContent=new Date().toLocaleTimeString('bn-BD',{hour:'2-digit',minute:'2-digit'});
+}
+
+function refreshUI(){
+  updateMapMarkers();
+  renderFilterChips();
+  renderBusList();
+  renderDetails();
+  updateStats();
+}
+
+// =================== TELEGRAM ===================
+async function sendTelegram(bus, pos, type){
+  const now=new Date().toLocaleString('bn-BD',{hour:'2-digit',minute:'2-digit',hour12:true});
+  const link=`${WEBSITE_URL}?tracking=${bus.id}`;
+  let msg='';
+  if(type==='board'){
+    const d=pos.lat&&pos.lng?haversine(pos.lat,pos.lng,COLLEGE.lat,COLLEGE.lng):null;
+    msg=`🚌 *নতুন যাত্রী বাসে উঠেছেন!*\n\n🏷️ বাস: *[${bus.shortName}] ${bus.name}*\n🗺️ রুট: _${bus.route}_\n\n📍 বর্তমান স্টপ: *${pos.currentStop||'?'}*\n➡️ পরের স্টপ: ${pos.nextStop||'দেবেন্দ্র কলেজ'}\n🏫 কলেজ পর্যন্ত: *${d?d.toFixed(1)+'কিমি':'?'}* (আনুমানিক ${d?etaText(d):'?'})\n\n🌐 [বাস ট্র্যাক করুন — আপনার অবস্থান থেকে দূরত্ব দেখুন](${link})\n\n🕐 _সময়: ${now}_`;
+  } else {
+    msg=`👋 *যাত্রী বাস থেকে নেমেছেন*\n🏷️ বাস: *[${bus.shortName}] ${bus.name}*\n🕐 _${now}_`;
+  }
+  try{
+    await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({chat_id:CHANNEL,text:msg,parse_mode:'Markdown',disable_web_page_preview:false})
+    });
+  }catch(e){console.error(e);}
+}
+
+// =================== ACTIONS ===================
+function showNotif(msg){ const n=document.getElementById('notif'); n.textContent=msg; n.classList.remove('hidden'); setTimeout(()=>n.classList.add('hidden'),3000); }
+function handleRefresh(){ loadAllBuses(); refreshUI(); if(trackingBusId) updateTrackingBanner(); showNotif('✅ আপডেট হয়েছে!'); }
+function getMyLocation(){
+  if(!navigator.geolocation){showNotif('❌ GPS নেই');return;}
+  navigator.geolocation.getCurrentPosition(pos=>{
+    userLocation={lat:pos.coords.latitude,lng:pos.coords.longitude};
+    if(userMarker) userMarker.remove();
+    const icon=L.divIcon({html:`<div style="background:#3B82F6;border:3px solid #fff;border-radius:50%;width:18px;height:18px"></div>`,iconSize:[18,18],iconAnchor:[9,9],className:''});
+    userMarker=L.marker([userLocation.lat,userLocation.lng],{icon}).addTo(map).bindPopup('আপনার অবস্থান');
+    map.setView([userLocation.lat,userLocation.lng],14);
+    showNotif('📍 অবস্থান পাওয়া গেছে!');
+    renderBusList();
+  },()=>showNotif('❌ অবস্থান পাওয়া যায়নি'));
+}
+function openModal(){ renderModalBuses(); document.getElementById('modal').classList.remove('hidden'); }
+function closeModal(){ document.getElementById('modal').classList.add('hidden'); }
+
+async function boardBus(busId){
+  closeModal();
+  myBoardedBus=busId;
+  const bus=BUSES.find(b=>b.id===busId);
+  shareLink=`${WEBSITE_URL}?tracking=${busId}`;
+  document.getElementById('boardBanner').classList.add('hidden');
+  document.getElementById('boardedBanner').classList.remove('hidden');
+  document.getElementById('boardedBusName').textContent=bus.name;
+  showNotif('📍 GPS চালু হচ্ছে...');
+  if(navigator.geolocation){
+    navigator.geolocation.getCurrentPosition(pos=>{
+      userLocation={lat:pos.coords.latitude,lng:pos.coords.longitude};
+      pushPosition(busId,pos.coords.latitude,pos.coords.longitude);
+      sendTelegram(bus,busData[busId],'board');
+      showNotif('✅ Telegram-এ notification গেছে!');
+    },err=>{
+      const fs=bus.stops[0];
+      busData[busId]={id:busId,lat:fs.lat,lng:fs.lng,active:true,status:'চলছে',currentStop:fs.name,nextStop:bus.stops[1]?.name||'',dist:'?',updated:new Date().toLocaleTimeString('bn-BD',{hour:'2-digit',minute:'2-digit'})};
+      saveBus(busId,busData[busId]);
+      sendTelegram(bus,busData[busId],'board');
+      showNotif('⚠️ GPS পাওয়া যায়নি');
+      refreshUI();
+    },{enableHighAccuracy:true,timeout:12000});
+    startTracking(busId);
+  }
+}
+
+async function alightBus(){
+  if(myBoardedBus){
+    const bus=BUSES.find(b=>b.id===myBoardedBus);
+    if(busData[myBoardedBus]){ busData[myBoardedBus].active=false; }
+    clearBus(myBoardedBus);
+    stopTracking();
+    await sendTelegram(bus,{},'alight');
+  }
+  myBoardedBus=null; shareLink='';
+  document.getElementById('boardBanner').classList.remove('hidden');
+  document.getElementById('boardedBanner').classList.add('hidden');
+  refreshUI();
+  showNotif('👋 বাস থেকে নেমে গেছেন');
+}
+
+function copyLink(){ navigator.clipboard.writeText(shareLink).then(()=>showNotif('🔗 লিংক কপি হয়েছে!')); }
+function switchTab(id,btn){
+  document.querySelectorAll('[id^="tab-"]').forEach(t=>t.classList.add('hidden'));
+  document.getElementById('tab-'+id).classList.remove('hidden');
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  if(btn) btn.classList.add('active');
+  if(id==='map') setTimeout(()=>map&&map.invalidateSize(),100);
+}
+
+// =================== INIT ===================
+window.onload=function(){
+  loadAllBuses();
+  initMap();
+  refreshUI();
+
+  // Check if opened via tracking link
+  const params=new URLSearchParams(window.location.search);
+  const tid=params.get('tracking');
+  if(tid){
+    setTimeout(()=>{
+      initTrackingMode(tid);
+      selectedBus=tid;
+      updateMapMarkers();
+      renderFilterChips();
+      switchTab('map');
+    },600);
+  }
+
+  // Auto refresh every 15s
+  setInterval(()=>{
+    loadAllBuses();
+    refreshUI();
+    if(trackingBusId) updateTrackingBanner();
+  },15000);
+};
+</script>
+</body>
+</html>
